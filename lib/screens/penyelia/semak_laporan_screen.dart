@@ -294,7 +294,6 @@ class _SemakLaporanDetailScreen extends StatefulWidget {
 
 class _SemakLaporanDetailScreenState extends State<_SemakLaporanDetailScreen> {
   final TextEditingController _notaController = TextEditingController();
-  int _kemajuan = 0;
   bool _submitting = false;
   String? _error;
 
@@ -304,7 +303,6 @@ class _SemakLaporanDetailScreenState extends State<_SemakLaporanDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _kemajuan = (widget.laporan['kemajuan_peratus'] as num?)?.toInt() ?? 0;
     _notaController.text = widget.laporan['nota_admin']?.toString() ?? '';
     _loadGambar();
   }
@@ -350,7 +348,6 @@ class _SemakLaporanDetailScreenState extends State<_SemakLaporanDetailScreen> {
       laporanId: laporanId,
       status: status,
       nota: _notaController.text.trim(),
-      kemajuanPeratus: _kemajuan,
     );
 
     if (!mounted) return;

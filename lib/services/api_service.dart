@@ -1,16 +1,26 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://10.0.2.2:3001/api';
+  // true = live server, false = local dev (10.0.2.2)
+  static const bool _isProduction = true;
 
-  static const Duration _timeout = Duration(seconds: 12);
+  static const String baseUrl = _isProduction
+      ? 'https://ipantau-backend-baru.onrender.com/api'
+      : 'http://10.0.2.2:3001/api';
+
+  static const Duration _timeout = Duration(seconds: 30);
 
   static Map<String, dynamic> _noInternet() => {
         'success': false,
         'message': 'Gagal sambung ke pelayan. Semak sambungan internet.',
       };
+
+  static Map<String, dynamic> _handleResponse(http.Response response) {
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
 
   static Future<Map<String, dynamic>> _get(
     String path, {
@@ -25,7 +35,11 @@ class ApiService {
       final response = await http
           .get(Uri.parse('$baseUrl$path'), headers: headers)
           .timeout(_timeout);
-      return jsonDecode(response.body) as Map<String, dynamic>;
+      return _handleResponse(response);
+    } on http.ClientException {
+      return _noInternet();
+    } on FormatException {
+      return {'success': false, 'message': 'Ralat format data dari pelayan.'};
     } catch (_) {
       return _noInternet();
     }
@@ -49,8 +63,11 @@ class ApiService {
             body: jsonEncode(body ?? {}),
           )
           .timeout(_timeout);
-
-      return jsonDecode(response.body) as Map<String, dynamic>;
+      return _handleResponse(response);
+    } on http.ClientException {
+      return _noInternet();
+    } on FormatException {
+      return {'success': false, 'message': 'Ralat format data dari pelayan.'};
     } catch (_) {
       return _noInternet();
     }
@@ -74,7 +91,34 @@ class ApiService {
             body: body == null ? null : jsonEncode(body),
           )
           .timeout(_timeout);
-      return jsonDecode(response.body) as Map<String, dynamic>;
+      return _handleResponse(response);
+    } on http.ClientException {
+      return _noInternet();
+    } on FormatException {
+      return {'success': false, 'message': 'Ralat format data dari pelayan.'};
+    } catch (_) {
+      return _noInternet();
+    }
+  }
+
+  // ignore: unused_element
+  static Future<Map<String, dynamic>> _delete(
+    String path, {
+    String? token,
+  }) async {
+    try {
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      };
+      final response = await http
+          .delete(Uri.parse('$baseUrl$path'), headers: headers)
+          .timeout(_timeout);
+      return _handleResponse(response);
+    } on http.ClientException {
+      return _noInternet();
+    } on FormatException {
+      return {'success': false, 'message': 'Ralat format data dari pelayan.'};
     } catch (_) {
       return _noInternet();
     }
@@ -188,17 +232,26 @@ class ApiService {
       request.fields['captured_at'] = capturedAtIso;
       if (latitud != null) request.fields['latitud'] = '$latitud';
       if (longitud != null) request.fields['longitud'] = '$longitud';
+
+      final ext = fileName.split('.').last.toLowerCase();
+      final mimeType = ext == 'png' ? 'image/png' : 'image/jpeg';
+
       request.files.add(
         http.MultipartFile.fromBytes(
           'gambar',
           bytes,
           filename: fileName,
+          contentType: MediaType.parse(mimeType),
         ),
       );
 
       final streamed = await request.send().timeout(_timeout);
       final response = await http.Response.fromStream(streamed);
-      return jsonDecode(response.body) as Map<String, dynamic>;
+      return _handleResponse(response);
+    } on http.ClientException {
+      return _noInternet();
+    } on FormatException {
+      return {'success': false, 'message': 'Ralat format data dari pelayan.'};
     } catch (_) {
       return _noInternet();
     }
@@ -262,15 +315,13 @@ class ApiService {
     required int laporanId,
     required String status,
     required String nota,
-    required int kemajuanPeratus,
   }) async {
     return _put(
       '/laporan/$laporanId/semak',
       token: token,
       body: {
         'status': status,
-        'ringkasan': nota,
-        'kemajuan_peratus': kemajuanPeratus,
+        'nota_admin': nota,
       },
     );
   }
