@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:latlong2/latlong.dart' hide Path;
 import 'package:provider/provider.dart';
 
 import '../../providers/auth_provider.dart';
@@ -292,7 +292,7 @@ class _CheckinScreenState extends State<CheckinScreen> {  final MapController _m
                           point: draft,
                           width: 40,
                           height: 40,
-                          child: const Icon(
+                          child: Icon(
                             Icons.place,
                             color: context.ip.navy800,
                             size: 40,

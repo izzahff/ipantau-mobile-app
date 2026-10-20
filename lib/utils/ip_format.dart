@@ -9,7 +9,7 @@ class IpFormat {
     return DateTime.tryParse(v.toString())?.toLocal();
   }
 
-  static String _2(int n) => n.toString().padLeft(2, '0');
+  static String _pad(int n) => n.toString().padLeft(2, '0');
 
   static String date(dynamic v) {
     final d = parse(v);
@@ -20,7 +20,7 @@ class IpFormat {
   static String time(dynamic v) {
     final d = parse(v);
     if (d == null) return '--:--';
-    return '${_2(d.hour)}:${_2(d.minute)}';
+    return '${_pad(d.hour)}:${_pad(d.minute)}';
   }
 
   static String dateTime(dynamic v) {
