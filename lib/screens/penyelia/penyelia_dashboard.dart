@@ -178,7 +178,7 @@ class _PenyeliaDashboardState extends State<PenyeliaDashboard> {
                           sub: '${l['tapak_nama'] ?? l['nama_tapak'] ?? '-'} · ${IpFormat.dateTime(laporanTarikh(l))}',
                           status: l['status']?.toString(),
                           last: i == terkini.length - 1,
-                          onTap: _openSemak,
+                          onTap: () => _push(SemakanScreen(laporan: l)),
                         ),
                     ]),
                   ),
