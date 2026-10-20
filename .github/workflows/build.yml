@@ -37,6 +37,9 @@ jobs:
             | sed -E 's/^::info /::notice /'
           exit $code
 
+      - name: Run tests
+        run: flutter test --no-pub
+
       - name: Build APK
         run: flutter build apk --release
 
