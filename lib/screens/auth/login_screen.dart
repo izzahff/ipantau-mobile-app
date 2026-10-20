@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../widgets/v2/ui.dart';
+import 'lupa_kata_laluan_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -47,6 +48,17 @@ class _LoginScreenState extends State<LoginScreen> {
     } else if (peranan == 'penyelia') {
       Navigator.pushReplacementNamed(context, '/penyelia/dashboard');
     }
+  }
+
+  Future<void> _lupaKataLaluan() async {
+    final email = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => LupaKataLaluanScreen(initialEmail: _emailController.text.trim())),
+    );
+    if (!mounted || email == null) return;
+    _emailController.text = email;
+    _passwordController.clear();
+    context.read<AuthProvider>().clearError();
   }
 
   @override
@@ -135,9 +147,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 16),
                   Center(
-                    child: IpLinkButton('Lupa kata laluan?', onTap: () {
-                      showIpToast(context, 'Sila hubungi penyelia atau pentadbir sistem.', tone: IpToastTone.info);
-                    }),
+                    child: IpLinkButton('Lupa kata laluan?', onTap: _lupaKataLaluan),
                   ),
                 ],
               ),
