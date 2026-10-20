@@ -186,12 +186,21 @@ class IpHeaderBell extends StatelessWidget {
 
 /// Scaffold for pushed (full-screen) views: navy header with back arrow.
 class IpPushedScaffold extends StatelessWidget {
-  const IpPushedScaffold({super.key, required this.title, this.sub, required this.body, this.bottom, this.headerChild});
+  const IpPushedScaffold({
+    super.key,
+    required this.title,
+    this.sub,
+    required this.body,
+    this.bottom,
+    this.headerChild,
+    this.right,
+  });
   final String title;
   final String? sub;
   final Widget body;
   final Widget? bottom;
   final Widget? headerChild;
+  final Widget? right;
 
   @override
   Widget build(BuildContext context) {
@@ -202,7 +211,7 @@ class IpPushedScaffold extends StatelessWidget {
           title: title,
           sub: sub,
           onBack: () => Navigator.maybePop(context),
-          right: const IpHeaderBell(),
+          right: right ?? const IpHeaderBell(),
           child: headerChild,
         ),
         Expanded(child: body),
