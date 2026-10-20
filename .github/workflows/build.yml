@@ -26,7 +26,16 @@ jobs:
         run: flutter pub get
 
       - name: Analyze code
-        run: flutter analyze
+        run: |
+          set +e
+          flutter analyze --no-pub > analyze.txt 2>&1
+          code=$?
+          cat analyze.txt
+          # Surface each issue as a GitHub annotation (visible in the PR/checks UI)
+          grep -E '^ *(error|warning|info) [^ ]+ ' analyze.txt | head -50 \
+            | sed -E 's/^ *(error|warning|info) [^ ]+ (.*) [^ ]+ ([^ ]+):([0-9]+):([0-9]+) [^ ]+ ([a-z_0-9]+)$/::\1 file=\3,line=\4,col=\5::\6: \2/' \
+            | sed -E 's/^::info /::notice /'
+          exit $code
 
       - name: Build APK
         run: flutter build apk --release
