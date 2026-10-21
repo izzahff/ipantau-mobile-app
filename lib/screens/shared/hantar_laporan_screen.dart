@@ -3,9 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/ipantau_app_bar.dart';
-import 'laporan_saya_screen.dart';
+import '../../widgets/v2/ui.dart';
 
 class HantarLaporanScreen extends StatefulWidget {
   final int tapakId;
@@ -169,16 +167,12 @@ class _HantarLaporanScreenState extends State<HantarLaporanScreen> {
     setState(() => _loading = false);
 
     if (result['success'] == true) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content:
-                Text(result['message'] ?? 'Laporan berjaya dihantar.')),
-      );
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(
-            builder: (_) => const LaporanSayaScreen(showBackButton: true)),
+      showIpToast(context, widget.isEdit ? 'Laporan berjaya dihantar semula' : 'Laporan berjaya dihantar');
+      // Back to the role shell: contractors land on the Laporan tab.
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        role == 'penyelia' ? '/penyelia/dashboard' : '/kontraktor/dashboard',
         (route) => false,
+        arguments: role == 'penyelia' ? 0 : 2,
       );
       return;
     }
@@ -188,176 +182,129 @@ class _HantarLaporanScreenState extends State<HantarLaporanScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final showDropdown =
-        !widget.isEdit && _role == 'kontraktor' && _tapakList.isNotEmpty;
-    final submitDisabled =
-        _loading ||
-        (!widget.isEdit &&
-            _role == 'kontraktor' &&
-            _selectedCheckinId == null);
+    final c = context.ip;
+    final showPicker = !widget.isEdit && _role == 'kontraktor' && _tapakList.isNotEmpty;
+    final submitDisabled = _loading || (!widget.isEdit && _role == 'kontraktor' && _selectedCheckinId == null);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F8FF),
-      appBar: IpantauAppBar(
-        title: widget.isEdit ? 'Edit & Hantar Semula' : 'Hantar Laporan',
-        backgroundColor: AppTheme.navy,
+    return IpPushedScaffold(
+      title: widget.isEdit ? 'Edit & Hantar Semula' : 'Laporan Baru',
+      sub: _selectedTapakNama,
+      bottom: Container(
+        padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + MediaQuery.paddingOf(context).bottom),
+        decoration: BoxDecoration(color: c.surface, border: Border(top: BorderSide(color: c.line))),
+        child: IpButton(
+          widget.isEdit ? 'Hantar Semula' : 'Hantar Laporan',
+          full: true,
+          size: IpButtonSize.lg,
+          icon: 'send',
+          loading: _loading,
+          onPressed: submitDisabled ? null : _submit,
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _card(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Tapak',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 8),
-                if (_loadingTapak)
-                  const LinearProgressIndicator()
-                else if (showDropdown)
-                  DropdownButtonFormField<int>(
-                    initialValue: _selectedTapakId,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
+          if (_error != null) ...[IpErrorBox(_error!), const SizedBox(height: 14)],
+          const IpFieldLabel('Tapak'),
+          if (_loadingTapak)
+            const IpLoading()
+          else if (showPicker)
+            SizedBox(
+              height: 62,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _tapakList.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 8),
+                itemBuilder: (_, i) {
+                  final t = _tapakList[i];
+                  final id = (t['id'] as num).toInt();
+                  final on = id == _selectedTapakId;
+                  return GestureDetector(
+                    onTap: on ? null : () => _onTapakChanged(id),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: on ? c.azure50 : c.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: on ? c.azure500 : c.line2, width: 1.5),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 10),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                        Text(t['kod_tapak']?.toString() ?? '-', style: ipMono(context, size: 11, color: on ? c.azure700 : c.text3)),
+                        Text(t['nama_tapak']?.toString() ?? '-',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.text)),
+                      ]),
                     ),
-                    items: _tapakList
-                        .map((t) => DropdownMenuItem<int>(
-                              value: (t['id'] as num).toInt(),
-                              child: Text(
-                                t['nama_tapak']?.toString() ?? '-',
-                                style: const TextStyle(fontSize: 13),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ))
-                        .toList(),
-                    onChanged: (val) {
-                      if (val == null) return;
-                      _onTapakChanged(val);
-                    },
-                  )
-                else
-                  Text(_selectedTapakNama),
-                if (_checkinWarning != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    _checkinWarning!,
-                    style: const TextStyle(
-                      color: Color(0xFFB91C1C),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ],
+                  );
+                },
+              ),
+            )
+          else
+            IpCard(
+              pad: 14,
+              child: Row(children: [
+                IpIcon('pin', size: 20, color: c.azure600),
+                const SizedBox(width: 10),
+                Expanded(child: Text(_selectedTapakNama, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: c.text))),
+              ]),
             ),
-          ),
-          const SizedBox(height: 12),
-          _card(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Ringkasan Kerja',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _ringkasanController,
-                  maxLines: 4,
-                  decoration: InputDecoration(
-                    hintText:
-                        'Contoh: Kerja pembersihan dan bancuhan konkrit siap 60%',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          if (_checkinWarning != null) ...[
+            const SizedBox(height: 10),
+            Row(children: [
+              IpIcon('alert', size: 16, color: c.amberText),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(_checkinWarning!, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: c.amberText)),
+              ),
+            ]),
+          ],
+          const SizedBox(height: 16),
+          const IpFieldLabel('Ringkasan kerja'),
+          IpInput(
+            controller: _ringkasanController,
+            hint: 'Terangkan kerja yang telah disiapkan…',
+            maxLines: 4,
+            keyboardType: TextInputType.multiline,
           ),
           if (_role != 'kontraktor') ...[
-            const SizedBox(height: 12),
-            _card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Kemajuan Kerja',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  Slider(
-                    value: _kemajuan.toDouble(),
-                    min: 0,
-                    max: 100,
-                    divisions: 100,
-                    label: '$_kemajuan%',
-                    onChanged: (value) =>
-                        setState(() => _kemajuan = value.round()),
-                  ),
-                  Text(
-                    '$_kemajuan%',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ],
+            const SizedBox(height: 16),
+            Row(children: [
+              const Expanded(child: IpFieldLabel('Kemajuan kerja')),
+              Text('$_kemajuan%', style: ipMono(context, size: 14, weight: FontWeight.w800, color: c.azure700)),
+            ]),
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                activeTrackColor: c.azure500,
+                inactiveTrackColor: c.surface3,
+                thumbColor: c.azure500,
+                overlayColor: c.azure500.withValues(alpha: .12),
               ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          _card(
-            child: Text(
-                'Jumlah gambar dilampirkan: ${widget.gambarIds.length}'),
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Text(
-              _error!,
-              style: const TextStyle(color: Color(0xFFB91C1C)),
+              child: Slider(
+                value: _kemajuan.toDouble(),
+                min: 0,
+                max: 100,
+                divisions: 100,
+                label: '$_kemajuan%',
+                onChanged: (v) => setState(() => _kemajuan = v.round()),
+              ),
             ),
           ],
           const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: submitDisabled ? null : _submit,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.navy,
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: Colors.grey.shade300,
-                disabledForegroundColor: Colors.grey.shade500,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+          IpCard(
+            pad: 14,
+            color: c.surface2,
+            child: Row(children: [
+              IpIcon('image', size: 19, color: c.icon),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('${widget.gambarIds.length} gambar dilampirkan',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.text)),
               ),
-              child: _loading
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : Text(
-                      widget.isEdit ? 'Hantar Semula' : 'Hantar Laporan'),
-            ),
+              const IpChip('Tera GPS auto', small: true, tone: IpTone.azure),
+            ]),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _card({required Widget child}) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFD0DFF0)),
-      ),
-      padding: const EdgeInsets.all(14),
-      child: child,
     );
   }
 }
