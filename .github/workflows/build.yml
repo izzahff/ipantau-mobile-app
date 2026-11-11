@@ -27,7 +27,7 @@ jobs:
       # Pin Java 17. Newer runner images default to Java 25, which the
       # Gradle 8.14 Kotlin DSL cannot parse ("What went wrong: 25.0.5").
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'
