@@ -16,6 +16,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Pin Java 17. Newer runner images default to Java 25, which the
+      # Gradle 8.14 Kotlin DSL cannot parse ("What went wrong: 25.0.5").
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
