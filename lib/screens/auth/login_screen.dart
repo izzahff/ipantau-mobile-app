@@ -122,13 +122,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       onTap: () => setState(() => _showPassword = !_showPassword),
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(2, 10, 2, 0),
-                    child: Text(
-                      'Mestilah 8 aksara atau lebih, dengan sekurang-kurangnya 1 nombor dan 1 simbol.',
-                      style: TextStyle(fontSize: 12.5, color: c.text3, height: 1.45),
-                    ),
-                  ),
                   Consumer<AuthProvider>(
                     builder: (context, auth, _) => auth.error == null
                         ? const SizedBox.shrink()

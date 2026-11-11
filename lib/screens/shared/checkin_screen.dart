@@ -286,6 +286,7 @@ class _CheckinScreenState extends State<CheckinScreen> {  final MapController _m
                           'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                       userAgentPackageName: 'ipantau',
                     ),
+                    const SimpleAttributionWidget(source: Text('OpenStreetMap contributors')),
                     MarkerLayer(
                       markers: [
                         Marker(
@@ -771,6 +772,7 @@ class _CheckinScreenState extends State<CheckinScreen> {  final MapController _m
             options: MapOptions(initialCenter: site, initialZoom: 16),
             children: [
               TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'ipantau'),
+              const SimpleAttributionWidget(source: Text('OpenStreetMap contributors')),
               CircleLayer(circles: [
                 CircleMarker(
                   point: site,

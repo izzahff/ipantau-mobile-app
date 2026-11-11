@@ -361,6 +361,7 @@ Future<void> showSiteMapSheet(BuildContext context, {required String title, requ
           options: MapOptions(initialCenter: point, initialZoom: 16),
           children: [
             TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'ipantau'),
+            const SimpleAttributionWidget(source: Text('OpenStreetMap contributors')),
             MarkerLayer(markers: [
               Marker(point: point, width: 40, height: 40, child: IpIcon('pin', size: 36, color: ctx.ip.crimson600)),
             ]),
