@@ -8,8 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/ipantau_app_bar.dart';
+import '../../widgets/v2/ui.dart';
 import 'gambar_file_pick_stub.dart'
     if (dart.library.html) 'gambar_file_pick_web.dart' as file_pick;
 import 'hantar_laporan_screen.dart';
@@ -179,9 +178,7 @@ class _GambarScreenState extends State<GambarScreen> {
 
     if (_images.length >= _maxImages) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Maksimum $_maxImages gambar sahaja.')),
-        );
+        showIpToast(context, 'Maksimum $_maxImages gambar sahaja.', tone: IpToastTone.danger);
       }
       return;
     }
@@ -216,9 +213,7 @@ class _GambarScreenState extends State<GambarScreen> {
         capturedAt: capturedAt,
       );
       setState(() => _images.add(item));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Gambar berjaya dimuat naik.')),
-      );
+      showIpToast(context, 'Gambar berjaya dimuat naik.');
       return;
     }
 
@@ -256,67 +251,43 @@ class _GambarScreenState extends State<GambarScreen> {
       return;
     }
     if (!mounted) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: AppTheme.border,
-                borderRadius: BorderRadius.circular(2),
+    final source = await showIpSheet<ImageSource>(
+      context,
+      title: 'Tambah gambar',
+      builder: (ctx) {
+        final c = ctx.ip;
+        Widget row(String icon, String title, String sub, ImageSource s) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: IpCard(
+                pad: 14,
+                onTap: () => Navigator.pop(ctx, s),
+                child: Row(children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(color: c.azure50, borderRadius: BorderRadius.circular(13)),
+                    alignment: Alignment.center,
+                    child: IpIcon(icon, size: 21, color: c.azure700),
+                  ),
+                  const SizedBox(width: 13),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: c.text)),
+                      Text(sub, style: TextStyle(fontSize: 12.5, color: c.text3)),
+                    ]),
+                  ),
+                  IpIcon('chevronRight', size: 18, color: c.text3),
+                ]),
               ),
-            ),
-            ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(AppTheme.sm),
-                decoration: BoxDecoration(
-                  color: AppTheme.navy.withValues(alpha: 0.08),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.camera_alt_outlined,
-                    color: AppTheme.navy, size: 20),
-              ),
-              title: const Text('Kamera',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.textPrimary)),
-              onTap: () {
-                Navigator.pop(ctx);
-                _pickFromCamera();
-              },
-            ),
-            ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(AppTheme.sm),
-                decoration: BoxDecoration(
-                  color: AppTheme.navy.withValues(alpha: 0.08),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.photo_library_outlined,
-                    color: AppTheme.navy, size: 20),
-              ),
-              title: const Text('Galeri',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.textPrimary)),
-              onTap: () {
-                Navigator.pop(ctx);
-                _pickFromGallery();
-              },
-            ),
-            const SizedBox(height: AppTheme.md),
-          ],
-        ),
-      ),
+            );
+        return Column(children: [
+          row('camera', 'Kamera', 'Ambil gambar baharu di tapak', ImageSource.camera),
+          row('image', 'Galeri', 'Pilih gambar sedia ada', ImageSource.gallery),
+        ]);
+      },
     );
+    if (source == ImageSource.camera) await _pickFromCamera();
+    if (source == ImageSource.gallery) await _pickFromGallery();
   }
 
   void _goNext() {
@@ -343,381 +314,160 @@ class _GambarScreenState extends State<GambarScreen> {
     );
   }
 
+  void _removeImage(int i) => setState(() => _images.removeAt(i));
+
   @override
   Widget build(BuildContext context) {
-    final canAdd = !_uploading && !_loading && _images.length < _maxImages;
+    final c = context.ip;
+    final canAdd = !_uploading && !_loading && _images.length < _maxImages && _tapakId != null;
     final hasPhotos = _images.isNotEmpty;
 
-    return Scaffold(
-      backgroundColor: AppTheme.background,
-      appBar: const IpantauAppBar(title: 'Ambil Gambar'),
-      body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppTheme.navy))
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(
-                AppTheme.md,
-                AppTheme.md,
-                AppTheme.md,
-                100,
+    return IpPushedScaffold(
+      title: widget.isEdit ? 'Edit Gambar' : 'Ambil Gambar',
+      sub: _loading ? null : _tapakNama,
+      bottom: _loading || _checkin == null
+          ? null
+          : Container(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + MediaQuery.paddingOf(context).bottom),
+              decoration: BoxDecoration(color: c.surface, border: Border(top: BorderSide(color: c.line))),
+              child: IpButton(
+                hasPhotos ? 'Seterusnya · ${_images.length} gambar' : 'Ambil sekurang-kurangnya 1 gambar',
+                full: true,
+                size: IpButtonSize.lg,
+                icon: 'send',
+                onPressed: hasPhotos && !_uploading ? _goNext : null,
               ),
+            ),
+      body: _loading
+          ? const IpLoading()
+          : ListView(
+              padding: const EdgeInsets.all(16),
               children: [
-                _buildTopRow(),
-                const SizedBox(height: AppTheme.md),
-
-                if (_error != null) ...[
-                  _errorBanner(),
-                  const SizedBox(height: AppTheme.md),
+                if (_error != null) ...[IpErrorBox(_error!), const SizedBox(height: 14)],
+                if (_checkin != null) ...[
+                  IpCard(
+                    pad: 14,
+                    child: Row(children: [
+                      SizedBox(width: 38, height: 38, child: Center(child: IpIcon('pin', size: 22, color: c.azure600))),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(_tapakNama, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: c.text)),
+                          Text(_gpsActive ? _gpsShort : 'Lokasi GPS tidak tersedia',
+                              style: ipMono(context, size: 12, color: c.text3)),
+                        ]),
+                      ),
+                      IpChip(_gpsActive ? 'GPS aktif' : 'Tiada GPS',
+                          small: true, dot: true, tone: _gpsActive ? IpTone.emerald : IpTone.amber),
+                    ]),
+                  ),
+                  const SizedBox(height: 18),
+                  IpSectionLabel('Gambar (${_images.length}/$_maxImages)', icon: 'image'),
+                  GridView.count(
+                    crossAxisCount: 2,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    childAspectRatio: 1,
+                    children: [
+                      for (final (i, img) in _images.indexed) _thumb(context, i, img),
+                      if (_images.length < _maxImages) _addTile(context, canAdd),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Padding(padding: const EdgeInsets.only(top: 1), child: IpIcon('info', size: 14, color: c.text3)),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text('Timestamp & koordinat GPS akan ditera secara automatik.',
+                          style: TextStyle(fontSize: 12, color: c.text3)),
+                    ),
+                  ]),
                 ],
-
-                _buildUploadButton(canAdd: canAdd),
-                const SizedBox(height: AppTheme.md),
-
-                _buildPhotoGrid(canAdd: canAdd),
               ],
             ),
-      bottomNavigationBar: Padding(
-        padding: EdgeInsets.fromLTRB(
-          AppTheme.md,
-          AppTheme.sm,
-          AppTheme.md,
-          MediaQuery.of(context).padding.bottom + AppTheme.sm + 4,
-        ),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-            boxShadow: hasPhotos ? AppTheme.buttonShadow : [],
-          ),
-          child: SizedBox(
-            height: 50,
-            child: ElevatedButton(
-              onPressed:
-                  (_loading || _uploading || !hasPhotos) ? null : _goNext,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.navy,
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: AppTheme.border,
-                disabledForegroundColor: AppTheme.textMuted,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                ),
-              ),
-              child: _uploading
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Text(
-                      'Seterusnya',
-                      style: TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w700),
-                    ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 
-  Widget _buildTopRow() {
-    return Row(
-      children: [
-        Text(
-          '${_images.length}/$_maxImages gambar',
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppTheme.textPrimary,
-          ),
-        ),
-        const Spacer(),
-        Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: AppTheme.navyLight.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(AppTheme.radiusRound),
-            border: Border.all(
-                color: AppTheme.navyLight.withValues(alpha: 0.35)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                _gpsActive ? Icons.gps_fixed : Icons.gps_not_fixed,
-                size: 12,
-                color: AppTheme.navyLight,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                _gpsActive ? 'GPS aktif' : 'GPS —',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.navyLight,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildUploadButton({required bool canAdd}) {
-    if (kIsWeb) {
-      return DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          boxShadow: canAdd ? AppTheme.buttonShadow : [],
-        ),
-        child: SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: ElevatedButton.icon(
-            onPressed: canAdd ? _pickFromWebFile : null,
-            icon: const Icon(Icons.upload_outlined, size: 18),
-            label: const Text(
-              'Pilih Gambar dari Fail',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.navy,
-              foregroundColor: Colors.white,
-              disabledBackgroundColor: AppTheme.border,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Row(
-      children: [
-        Expanded(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-              boxShadow: canAdd ? AppTheme.buttonShadow : [],
-            ),
-            child: SizedBox(
-              height: 48,
-              child: ElevatedButton.icon(
-                onPressed: canAdd ? _pickFromCamera : null,
-                icon: const Icon(Icons.camera_alt_outlined, size: 18),
-                label: _uploading
-                    ? const Text('Memuat naik...',
-                        style: TextStyle(fontWeight: FontWeight.w700))
-                    : const Text('Kamera',
-                        style: TextStyle(fontWeight: FontWeight.w700)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.navy,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: AppTheme.border,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: AppTheme.sm + 4),
-        Expanded(
-          child: SizedBox(
-            height: 48,
-            child: OutlinedButton.icon(
-              onPressed: canAdd ? _pickFromGallery : null,
-              icon: const Icon(Icons.photo_library_outlined, size: 18),
-              label: const Text('Galeri',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppTheme.navy,
-                side: const BorderSide(color: AppTheme.navy),
-                disabledForegroundColor: AppTheme.textMuted,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPhotoGrid({required bool canAdd}) {
-    return GridView.count(
-      crossAxisCount: 3,
-      crossAxisSpacing: AppTheme.sm,
-      mainAxisSpacing: AppTheme.sm,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      children: List.generate(_maxImages, (i) {
-        if (i < _images.length) return _filledCell(i);
-        return _emptyCell(i, canAdd: canAdd);
-      }),
-    );
-  }
-
-  Widget _filledCell(int index) {
-    final img = _images[index];
+  Widget _thumb(BuildContext context, int i, _UploadedImage img) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Image.memory(img.bytes, fit: BoxFit.cover),
+      borderRadius: BorderRadius.circular(14),
+      child: Stack(fit: StackFit.expand, children: [
+        Image.memory(img.bytes, fit: BoxFit.cover),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(8, 14, 8, 6),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                colors: [const Color(0xFF080E1A).withValues(alpha: .8), Colors.transparent],
+              ),
+            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text(_formatTimestampShort(img.capturedAt), style: ipMono(context, size: 10, color: Colors.white)),
+              Text(_gpsShort, style: ipMono(context, size: 9.5, color: const Color(0xFF9EC1FF))),
+            ]),
+          ),
+        ),
+        Positioned(
+          top: 6,
+          right: 6,
+          child: Material(
+            color: Colors.black.withValues(alpha: .55),
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: () => _removeImage(i),
+              child: const SizedBox(width: 32, height: 32, child: Center(child: IpIcon('x', size: 16, color: Colors.white))),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
 
+  Widget _addTile(BuildContext context, bool enabled) {
+    final c = context.ip;
+    return Material(
+      color: c.surface2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: c.line2, width: 1.5)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: enabled ? _handleAddPhoto : null,
+        child: Stack(children: [
+          Center(
+            child: _uploading
+                ? CircularProgressIndicator(strokeWidth: 2.4, color: c.azure500)
+                : Column(mainAxisSize: MainAxisSize.min, children: [
+                    IpIcon('camera', size: 26, color: enabled ? c.azure600 : c.text3),
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Text('Ketuk untuk ambil / letak gambar',
+                          textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: c.text2, fontWeight: FontWeight.w600)),
+                    ),
+                  ]),
+          ),
           Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
+            right: 8,
+            bottom: 8,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, Colors.black54],
-                ),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: Text(
-                      _gpsShort,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 7,
-                        fontFamily: 'monospace',
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Text(
-                    _formatTimestampShort(img.capturedAt),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 7,
-                    ),
-                  ),
-                ],
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(color: const Color(0xFF080E1A).withValues(alpha: .7), borderRadius: BorderRadius.circular(8)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const IpIcon('pin', size: 11, color: Color(0xFF5798FF)),
+                const SizedBox(width: 5),
+                Text('Tera GPS auto', style: ipMono(context, size: 9.5, color: Colors.white)),
+              ]),
             ),
           ),
-
-          Positioned(
-            top: 4,
-            right: 4,
-            child: GestureDetector(
-              onTap: () => setState(() => _images.removeAt(index)),
-              child: Container(
-                width: 20,
-                height: 20,
-                decoration: const BoxDecoration(
-                  color: Colors.black54,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.close, color: Colors.white, size: 12),
-              ),
-            ),
-          ),
-        ],
+        ]),
       ),
     );
   }
-
-  Widget _emptyCell(int index, {required bool canAdd}) {
-    final isNext = index == _images.length;
-    final tappable = canAdd;
-    return GestureDetector(
-      onTap: tappable ? _handleAddPhoto : null,
-      child: CustomPaint(
-        painter: _DashedBorderPainter(
-          color: tappable ? AppTheme.navy.withValues(alpha: 0.30) : AppTheme.border,
-        ),
-        child: Center(
-          child: _uploading && isNext
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: AppTheme.navy),
-                )
-              : Icon(
-                  isNext ? Icons.camera_alt_outlined : Icons.add_rounded,
-                  color: tappable ? AppTheme.navy.withValues(alpha: 0.40) : AppTheme.border,
-                  size: 24,
-                ),
-        ),
-      ),
-    );
-  }
-
-  Widget _errorBanner() {
-    return Container(
-      padding: const EdgeInsets.all(AppTheme.sm + 4),
-      decoration: BoxDecoration(
-        color: AppTheme.errorLight,
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-        border: Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.error_outline, color: AppTheme.error, size: 16),
-          const SizedBox(width: AppTheme.sm),
-          Expanded(
-            child: Text(
-              _error!,
-              style: const TextStyle(fontSize: 12, color: AppTheme.error),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Dashed border painter ─────────────────────────────────────────────────────
-
-class _DashedBorderPainter extends CustomPainter {
-  const _DashedBorderPainter({required this.color});
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke;
-    const dash = 5.0;
-    const gap = 3.5;
-    final path = Path()
-      ..addRRect(RRect.fromRectAndRadius(
-        Rect.fromLTWH(0.75, 0.75, size.width - 1.5, size.height - 1.5),
-        Radius.circular(8.0),
-      ));
-    for (final metric in path.computeMetrics()) {
-      var dist = 0.0;
-      while (dist < metric.length) {
-        final end = (dist + dash).clamp(0.0, metric.length);
-        canvas.drawPath(metric.extractPath(dist, end), paint);
-        dist += dash + gap;
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DashedBorderPainter old) =>
-      old.color != color;
 }

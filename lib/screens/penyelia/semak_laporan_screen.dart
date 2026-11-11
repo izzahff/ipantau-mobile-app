@@ -3,10 +3,12 @@ import 'package:provider/provider.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/common/shimmer_loading.dart';
-import '../../widgets/ipantau_app_bar.dart';
+import '../../utils/ip_format.dart';
+import '../../widgets/v2/dash_widgets.dart';
+import '../../widgets/v2/report_widgets.dart';
+import '../../widgets/v2/ui.dart';
 
+/// Tab "Semak" for supervisors: review queue (default filter Menunggu).
 class SemakLaporanScreen extends StatefulWidget {
   const SemakLaporanScreen({super.key});
 
@@ -18,11 +20,19 @@ class _SemakLaporanScreenState extends State<SemakLaporanScreen> {
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _laporan = [];
+  ReportFilter _filter = ReportFilter.menunggu;
+  final _search = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -34,631 +44,351 @@ class _SemakLaporanScreenState extends State<SemakLaporanScreen> {
       });
       return;
     }
-
     setState(() {
       _loading = true;
       _error = null;
     });
-
     final res = await ApiService.getLaporanTapak(token);
     if (!mounted) return;
-
     if (res['success'] == true) {
-      final data = (res['data'] as List?) ?? [];
       setState(() {
-        _laporan = data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        _laporan = ((res['data'] as List?) ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
         _loading = false;
       });
     } else {
       setState(() {
         _loading = false;
-        _error = res['message'] ?? 'Gagal memuatkan laporan.';
+        _error = res['message']?.toString() ?? 'Gagal memuatkan laporan.';
       });
     }
   }
 
-  Color _statusColor(String status) {
-    if (status == 'lulus') return AppTheme.success;
-    if (status == 'tolak') return AppTheme.error;
-    return AppTheme.gold;
-  }
-
-  Color _statusBg(String status) {
-    if (status == 'lulus') return AppTheme.successLight;
-    if (status == 'tolak') return AppTheme.errorLight;
-    return AppTheme.goldLight;
-  }
-
-  String _statusLabel(String status) {
-    if (status == 'lulus') return 'Lulus';
-    if (status == 'tolak') return 'Tolak';
-    return 'Pending';
-  }
-
-  String _formatDate(dynamic raw) {
-    if (raw == null) return '';
-    final dt = DateTime.tryParse(raw.toString());
-    if (dt == null) return '';
-    final local = dt.toLocal();
-    const months = ['Jan', 'Feb', 'Mac', 'Apr', 'Mei', 'Jun', 'Jul', 'Ogo', 'Sep', 'Okt', 'Nov', 'Dis'];
-    final hh = local.hour.toString().padLeft(2, '0');
-    final mm = local.minute.toString().padLeft(2, '0');
-    return '${local.day} ${months[local.month - 1]}, $hh:$mm';
+  Future<void> _open(Map<String, dynamic> l) async {
+    final changed = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => SemakanScreen(laporan: l)));
+    if (mounted && changed == true) _load();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.background,
-      appBar: const IpantauAppBar(title: 'Semak Laporan Pekerja'),
-      body: SafeArea(
+    final c = context.ip;
+    final filtered = _laporan.where((l) => matchesFilter(l, _filter) && matchesQuery(l, _search.text)).toList();
+    final groups = groupReports(filtered);
+
+    return Column(children: [
+      const IpAppHeader(title: 'Semak Laporan Pekerja', right: IpHeaderBell()),
+      Expanded(
         child: RefreshIndicator(
           onRefresh: _load,
-          color: AppTheme.navy,
-          child: _loading
-              ? const ShimmerList()
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(AppTheme.md, AppTheme.md, AppTheme.md, 100),
-                  children: [
-                    if (_error != null) ...[
-                      _errorBanner(),
-                      const SizedBox(height: AppTheme.md),
-                    ],
-                    if (_laporan.isEmpty)
-                      _emptyState()
-                    else
-                      ..._laporan.map(_laporanCard),
-                  ],
-                ),
-        ),
-      ),
-    );
-  }
-
-  Widget _emptyState() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 80),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(AppTheme.lg),
-            decoration: BoxDecoration(
-              color: AppTheme.navy.withValues(alpha: 0.06),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.fact_check_outlined, size: 40, color: AppTheme.navy),
-          ),
-          const SizedBox(height: AppTheme.md),
-          const Text(
-            'Tiada laporan untuk disemak',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
-          ),
-          const SizedBox(height: AppTheme.xs),
-          const Text(
-            'Laporan daripada pekerja akan muncul di sini.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: AppTheme.textMuted, height: 1.5),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _laporanCard(Map<String, dynamic> item) {
-    final status = item['status']?.toString() ?? 'pending';
-    final statusColor = _statusColor(status);
-    final statusBg = _statusBg(status);
-    final tapakNama = item['tapak_nama']?.toString() ?? '-';
-    final pekerja = item['pekerja_nama']?.toString() ?? '-';
-    final date = _formatDate(item['submitted_at']);
-    final ringkasan = item['ringkasan']?.toString() ?? '';
-    final jumlahGambar = (item['jumlah_gambar'] as num?)?.toInt() ?? 0;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppTheme.sm + 4),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: AppTheme.cardShadow,
-        ),
-        child: Material(
-          color: AppTheme.surface,
-          borderRadius: BorderRadius.circular(14),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: () async {
-              final refreshed = await Navigator.push<bool>(
-                context,
-                MaterialPageRoute(builder: (_) => _SemakLaporanDetailScreen(laporan: item)),
-              );
-              if (refreshed == true && mounted) _load();
-            },
-            child: Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: AppTheme.border),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              padding: const EdgeInsets.all(AppTheme.md),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          tapakNama,
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (date.isNotEmpty) ...[
-                        const SizedBox(width: AppTheme.sm),
-                        Text(date, style: const TextStyle(fontSize: 10, color: AppTheme.textMuted)),
-                      ],
-                      const SizedBox(width: AppTheme.sm),
-                      _statusBadge(label: _statusLabel(status), color: statusColor, bg: statusBg),
-                    ],
-                  ),
-                  const SizedBox(height: AppTheme.xs),
-                  Row(
-                    children: [
-                      const Icon(Icons.person_outline, size: 13, color: AppTheme.textMuted),
-                      const SizedBox(width: 4),
-                      Text(
-                        pekerja,
-                        style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
-                      ),
-                      if (jumlahGambar > 0) ...[
-                        const SizedBox(width: AppTheme.sm),
-                        const Icon(Icons.photo_library_outlined, size: 13, color: AppTheme.textMuted),
-                        const SizedBox(width: 4),
-                        Text(
-                          '$jumlahGambar gambar',
-                          style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
-                        ),
-                      ],
-                    ],
-                  ),
-                  if (ringkasan.isNotEmpty) ...[
-                    const SizedBox(height: AppTheme.sm - 2),
-                    Text(
-                      ringkasan,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11, color: AppTheme.textMuted, height: 1.4),
-                    ),
-                  ],
-                  const SizedBox(height: AppTheme.sm),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Text(
-                        'Ketuk untuk semak →',
-                        style: TextStyle(fontSize: 10, color: AppTheme.navy.withValues(alpha: 0.7)),
-                      ),
-                    ],
-                  ),
+          color: c.azure500,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              IpSearchBar(controller: _search, hint: 'Cari pekerja, tapak atau ID', onChanged: (_) => setState(() {})),
+              const SizedBox(height: 10),
+              StatusPills(value: _filter, onChanged: (f) => setState(() => _filter = f)),
+              const SizedBox(height: 16),
+              if (_error != null) ...[IpErrorBox(_error!, onRetry: _load), const SizedBox(height: 12)],
+              if (_loading)
+                const IpLoading()
+              else if (groups.isEmpty)
+                DashEmpty(
+                  icon: 'clipboardCheck',
+                  title: _laporan.isEmpty ? 'Tiada laporan untuk disemak' : 'Tiada laporan',
+                  sub: _laporan.isEmpty
+                      ? 'Laporan daripada pekerja akan muncul di sini.'
+                      : 'Tiada laporan yang sepadan dengan penapis.',
+                )
+              else
+                for (final (label, items) in groups) ...[
+                  GroupHeader(label: label, count: items.length),
+                  for (final l in items)
+                    Padding(padding: const EdgeInsets.only(bottom: 12), child: _QueueCard(laporan: l, onOpen: () => _open(l))),
                 ],
-              ),
-            ),
+              const SizedBox(height: 8),
+            ],
           ),
         ),
       ),
-    );
+    ]);
   }
+}
 
-  Widget _statusBadge({required String label, required Color color, required Color bg}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(AppTheme.radiusRound),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color)),
-    );
-  }
+class _QueueCard extends StatelessWidget {
+  const _QueueCard({required this.laporan, required this.onOpen});
+  final Map<String, dynamic> laporan;
+  final VoidCallback onOpen;
 
-  Widget _errorBanner() {
-    return Container(
-      padding: const EdgeInsets.all(AppTheme.sm + 4),
-      decoration: BoxDecoration(
-        color: AppTheme.errorLight,
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-        border: Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.error_outline, color: AppTheme.error, size: 16),
-          const SizedBox(width: AppTheme.sm),
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ip;
+    final l = laporan;
+    final pekerja = l['pekerja_nama']?.toString() ?? '-';
+    final jumlah = (l['jumlah_gambar'] as num?)?.toInt() ?? 0;
+    return IpCard(
+      pad: 15,
+      onTap: onOpen,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
-            child: Text(_error!, style: const TextStyle(fontSize: 12, color: AppTheme.error)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(l['tapak_nama']?.toString() ?? '-',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: c.text, letterSpacing: -.16)),
+              const SizedBox(height: 2),
+              Text('${laporanKod(l)} · ${IpFormat.time(l['submitted_at'])}', style: ipMono(context, size: 11.5, color: c.text3)),
+            ]),
           ),
-        ],
-      ),
+          const SizedBox(width: 10),
+          IpStatusText(l['status']?.toString(), small: true),
+        ]),
+        const SizedBox(height: 11),
+        Wrap(spacing: 14, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            IpAvatar(name: pekerja, size: 24),
+            const SizedBox(width: 6),
+            Text(pekerja, style: TextStyle(fontSize: 12.5, color: c.text2, fontWeight: FontWeight.w600)),
+          ]),
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            IpIcon('image', size: 15, color: c.text3),
+            const SizedBox(width: 5),
+            Text('$jumlah gambar', style: TextStyle(fontSize: 12.5, color: c.text3)),
+          ]),
+        ]),
+        const SizedBox(height: 11),
+        Text(l['ringkasan']?.toString() ?? '',
+            maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13.5, color: c.text2, height: 1.45)),
+        const SizedBox(height: 12),
+        Align(alignment: Alignment.centerRight, child: LihatButton(onTap: onOpen)),
+      ]),
     );
   }
 }
 
-class _SemakLaporanDetailScreen extends StatefulWidget {
-  const _SemakLaporanDetailScreen({required this.laporan});
-
+/// Supervisor review: photo, info, note, Tolak / Lulus. Pops `true` when decided.
+class SemakanScreen extends StatefulWidget {
+  const SemakanScreen({super.key, required this.laporan});
   final Map<String, dynamic> laporan;
 
   @override
-  State<_SemakLaporanDetailScreen> createState() => _SemakLaporanDetailScreenState();
+  State<SemakanScreen> createState() => _SemakanScreenState();
 }
 
-class _SemakLaporanDetailScreenState extends State<_SemakLaporanDetailScreen> {
-  final TextEditingController _notaController = TextEditingController();
+class _SemakanScreenState extends State<SemakanScreen> {
+  final _nota = TextEditingController();
+  List<Map<String, dynamic>>? _gambar;
   bool _submitting = false;
   String? _error;
 
-  bool _loadingGambar = true;
-  List<Map<String, dynamic>> _gambar = [];
+  Map<String, dynamic> get l => widget.laporan;
 
   @override
   void initState() {
     super.initState();
-    _notaController.text = widget.laporan['nota_admin']?.toString() ?? '';
+    _nota.text = l['nota_admin']?.toString() ?? '';
     _loadGambar();
   }
 
   @override
   void dispose() {
-    _notaController.dispose();
+    _nota.dispose();
     super.dispose();
   }
 
   Future<void> _loadGambar() async {
     final token = context.read<AuthProvider>().token;
-    if (token == null) {
-      setState(() => _loadingGambar = false);
+    final id = (l['id'] as num?)?.toInt();
+    if (token == null || id == null) {
+      setState(() => _gambar = []);
       return;
     }
-
-    final laporanId = (widget.laporan['id'] as num).toInt();
-    final res = await ApiService.getGambarLaporan(token: token, laporanId: laporanId);
+    final res = await ApiService.getGambarLaporan(token: token, laporanId: id);
     if (!mounted) return;
-
     setState(() {
-      _loadingGambar = false;
-      if (res['success'] == true) {
-        final data = (res['data'] as List?) ?? [];
-        _gambar = data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-      }
+      _gambar = res['success'] == true
+          ? ((res['data'] as List?) ?? [])
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .where((g) => (g['url']?.toString() ?? '').isNotEmpty)
+              .toList()
+          : [];
     });
   }
 
   Future<void> _semak(String status) async {
     final token = context.read<AuthProvider>().token;
     if (token == null) return;
-
     setState(() {
       _submitting = true;
       _error = null;
     });
-
-    final laporanId = (widget.laporan['id'] as num).toInt();
+    final nota = _nota.text.trim().isEmpty ? (status == 'lulus' ? 'Diluluskan.' : 'Ditolak.') : _nota.text.trim();
     final res = await ApiService.semakLaporan(
       token: token,
-      laporanId: laporanId,
+      laporanId: (l['id'] as num).toInt(),
       status: status,
-      nota: _notaController.text.trim(),
+      nota: nota,
     );
-
     if (!mounted) return;
     setState(() => _submitting = false);
-
     if (res['success'] == true) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(res['message'] ?? 'Berjaya.')),
-      );
+      showIpToast(context, status == 'lulus' ? 'Laporan diluluskan' : 'Laporan ditolak',
+          tone: status == 'lulus' ? IpToastTone.success : IpToastTone.danger);
       Navigator.pop(context, true);
     } else {
-      setState(() => _error = res['message'] ?? 'Gagal semak laporan.');
+      setState(() => _error = res['message']?.toString() ?? 'Gagal semak laporan.');
     }
   }
 
-  String _formatDate(dynamic raw) {
-    if (raw == null) return '-';
-    final dt = DateTime.tryParse(raw.toString());
-    if (dt == null) return '-';
-    final local = dt.toLocal();
-    const months = ['Jan', 'Feb', 'Mac', 'Apr', 'Mei', 'Jun', 'Jul', 'Ogo', 'Sep', 'Okt', 'Nov', 'Dis'];
-    final hh = local.hour.toString().padLeft(2, '0');
-    final mm = local.minute.toString().padLeft(2, '0');
-    return '${local.day} ${months[local.month - 1]}, $hh:$mm';
+  WatermarkStamp _stamp(int i) {
+    final g = (_gambar != null && i < _gambar!.length) ? _gambar![i] : const <String, dynamic>{};
+    final lat = g['latitud'];
+    final lng = g['longitud'];
+    return WatermarkStamp(
+      kodTapak: l['kod_tapak']?.toString() ?? '-',
+      pekerja: l['pekerja_nama']?.toString() ?? '-',
+      masa: IpFormat.dateTime(g['captured_at'] ?? l['submitted_at']),
+      coord: lat == null || lng == null ? null : IpFormat.coord(lat, lng),
+    );
+  }
+
+  void _openViewer(int i) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PhotoViewerScreen(
+          urls: _gambar!.map((g) => g['url'].toString()).toList(),
+          initialIndex: i,
+          stampBuilder: _stamp,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final laporan = widget.laporan;
-    final status = laporan['status']?.toString() ?? 'pending';
-    final isReviewed = status == 'lulus' || status == 'tolak';
-    final tapakNama = laporan['tapak_nama']?.toString() ?? '-';
-    final pekerja = laporan['pekerja_nama']?.toString() ?? '-';
-    final ringkasan = laporan['ringkasan']?.toString() ?? '';
-    final submittedAt = _formatDate(laporan['submitted_at']);
+    final c = context.ip;
+    final status = l['status']?.toString();
+    final decided = !ReportStatus.isPending(status);
+    final jumlah = _gambar?.length ?? (l['jumlah_gambar'] as num?)?.toInt() ?? 0;
 
-    return Scaffold(
-      backgroundColor: AppTheme.background,
-      appBar: const IpantauAppBar(title: 'Semak Laporan'),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(AppTheme.md),
-          children: [
-            // Info card
-            _card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _infoRow(Icons.domain_outlined, 'Tapak', tapakNama),
-                  const SizedBox(height: AppTheme.sm),
-                  _infoRow(Icons.person_outline, 'Pekerja', pekerja),
-                  const SizedBox(height: AppTheme.sm),
-                  _infoRow(Icons.schedule_outlined, 'Dihantar', submittedAt),
-                ],
-              ),
+    final Widget footer = decided
+        ? Row(children: [
+            IpIcon(status == 'lulus' ? 'checkCircle' : (status == 'tolak' ? 'xCircle' : 'clock'),
+                size: 20, color: toneColors(context, ReportStatus.tone(status)).$2),
+            const SizedBox(width: 10),
+            Text(
+              status == 'lulus'
+                  ? 'Laporan diluluskan.'
+                  : status == 'tolak'
+                      ? 'Laporan ditolak.'
+                      : 'Menunggu semakan admin.',
+              style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: toneColors(context, ReportStatus.tone(status)).$2),
             ),
-            const SizedBox(height: AppTheme.md),
+          ])
+        : Row(children: [
+            Expanded(
+              child: IpButton('Tolak',
+                  full: true,
+                  size: IpButtonSize.lg,
+                  variant: IpButtonVariant.danger,
+                  icon: 'x',
+                  onPressed: _submitting ? null : () => _semak('tolak')),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: IpButton('Lulus',
+                  full: true,
+                  size: IpButtonSize.lg,
+                  variant: IpButtonVariant.emerald,
+                  icon: 'check',
+                  loading: _submitting,
+                  onPressed: _submitting ? null : () => _semak('lulus')),
+            ),
+          ]);
 
-            // Ringkasan kerja
-            if (ringkasan.isNotEmpty) ...[
-              _card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Ringkasan Kerja', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                    const SizedBox(height: AppTheme.sm),
-                    Text(
-                      ringkasan,
-                      style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary, height: 1.5),
+    return IpPushedScaffold(
+      title: 'Semak Laporan',
+      sub: '${l['kod_tapak'] ?? '-'} · ${laporanKod(l)}',
+      right: Padding(
+        padding: const EdgeInsets.only(left: 8),
+        child: IpChip(ReportStatus.label(status), small: true, tone: ReportStatus.tone(status)),
+      ),
+      bottom: Container(
+        padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + MediaQuery.paddingOf(context).bottom),
+        decoration: BoxDecoration(color: c.surface, border: Border(top: BorderSide(color: c.line))),
+        child: footer,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+        children: [
+          if (_error != null) ...[IpErrorBox(_error!), const SizedBox(height: 14)],
+          IpCard(
+            child: Column(children: [
+              InfoLine(icon: 'building', label: 'Tapak', value: l['tapak_nama']?.toString() ?? '-'),
+              InfoLine(icon: 'user', label: 'Pekerja', value: l['pekerja_nama']?.toString() ?? '-'),
+              InfoLine(icon: 'clock', label: 'Dihantar', value: IpFormat.dateTime(l['submitted_at']), last: true),
+            ]),
+          ),
+          const SizedBox(height: 16),
+          const IpSectionLabel('Ringkasan Kerja', icon: 'edit'),
+          IpCard(
+            child: Text(
+              (l['ringkasan']?.toString() ?? '').isEmpty ? 'Tiada ringkasan.' : l['ringkasan'].toString(),
+              style: TextStyle(fontSize: 14.5, color: c.text, height: 1.55),
+            ),
+          ),
+          const SizedBox(height: 16),
+          IpSectionLabel('Gambar Kerja ($jumlah)', icon: 'image'),
+          if (_gambar == null)
+            const IpPhotoPlaceholder(label: 'memuatkan gambar…', height: 210)
+          else if (_gambar!.isEmpty)
+            const IpPhotoPlaceholder(label: 'tiada gambar', height: 120)
+          else ...[
+            WatermarkedPhoto(url: _gambar!.first['url'].toString(), stamp: _stamp(0), onTap: () => _openViewer(0)),
+            if (_gambar!.length > 1) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 72,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _gambar!.length - 1,
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
+                  itemBuilder: (_, i) => GestureDetector(
+                    onTap: () => _openViewer(i + 1),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.network(_gambar![i + 1]['url'].toString(),
+                          width: 72,
+                          height: 72,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => Container(width: 72, height: 72, color: c.surface3)),
                     ),
-                  ],
+                  ),
                 ),
               ),
-              const SizedBox(height: AppTheme.md),
             ],
-
-            // Gambar section
-            _card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Gambar Kerja', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                  const SizedBox(height: AppTheme.sm),
-                  if (_loadingGambar)
-                    const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(AppTheme.lg),
-                        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.navy),
-                      ),
-                    )
-                  else if (_gambar.isEmpty)
-                    const Text(
-                      'Tiada gambar dilampirkan.',
-                      style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
-                    )
-                  else
-                    SizedBox(
-                      height: 130,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _gambar.length,
-                        separatorBuilder: (_, _) => const SizedBox(width: AppTheme.sm),
-                        itemBuilder: (_, i) {
-                          final url = _gambar[i]['url']?.toString() ?? '';
-                          return GestureDetector(
-                            onTap: () => _showImageDialog(url),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                              child: Image.network(
-                                url,
-                                width: 130,
-                                height: 130,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) => Container(
-                                  width: 130,
-                                  height: 130,
-                                  color: AppTheme.border,
-                                  child: const Icon(Icons.broken_image_outlined, color: AppTheme.textMuted),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppTheme.md),
-
-            _card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Nota Penyelia', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                  const SizedBox(height: AppTheme.sm),
-                  TextField(
-                    controller: _notaController,
-                    maxLines: 4,
-                    enabled: !isReviewed,
-                    decoration: InputDecoration(
-                      hintText: isReviewed ? '' : 'Contoh: Kerja perlu diulang di bahagian barat...',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                        borderSide: const BorderSide(color: AppTheme.border),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            if (_error != null) ...[
-              const SizedBox(height: AppTheme.sm),
-              _errorBanner(),
-            ],
-
-            const SizedBox(height: AppTheme.lg),
-
-            if (isReviewed) ...[
-              _reviewedBanner(status),
-            ] else ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 48,
-                      child: OutlinedButton(
-                        onPressed: _submitting ? null : () => _semak('tolak'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppTheme.error,
-                          side: const BorderSide(color: AppTheme.error),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
-                        ),
-                        child: _submitting
-                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.error))
-                            : const Text('Tolak', style: TextStyle(fontWeight: FontWeight.w700)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: AppTheme.md),
-                  Expanded(
-                    child: SizedBox(
-                      height: 48,
-                      child: ElevatedButton(
-                        onPressed: _submitting ? null : () => _semak('lulus'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.success,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
-                        ),
-                        child: _submitting
-                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                            : const Text('Lulus', style: TextStyle(fontWeight: FontWeight.w700)),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-
-            const SizedBox(height: AppTheme.lg),
           ],
-        ),
-      ),
-    );
-  }
-
-  void _showImageDialog(String url) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.black,
-        insetPadding: const EdgeInsets.all(12),
-        child: Stack(
-          children: [
-            Center(
-              child: InteractiveViewer(
-                child: Image.network(
-                  url,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, _, _) => const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 60),
-                ),
+          const SizedBox(height: 16),
+          const IpSectionLabel('Nota Penyelia', icon: 'edit'),
+          if (decided)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+              decoration: BoxDecoration(
+                color: c.surface2,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: c.line, width: 1.5),
               ),
+              child: Text(_nota.text.isEmpty ? '—' : _nota.text, style: TextStyle(fontSize: 14.5, color: c.text2, height: 1.5)),
+            )
+          else
+            IpInput(
+              controller: _nota,
+              hint: 'cth: tak okay, redo / kerja kemas, lulus',
+              maxLines: 4,
+              keyboardType: TextInputType.multiline,
             ),
-            Positioned(
-              top: 8,
-              right: 8,
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () => Navigator.pop(ctx),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _reviewedBanner(String status) {
-    final isLulus = status == 'lulus';
-    final color = isLulus ? AppTheme.success : AppTheme.error;
-    final bg = isLulus ? AppTheme.successLight : AppTheme.errorLight;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppTheme.md),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        children: [
-          Icon(isLulus ? Icons.check_circle_rounded : Icons.cancel_rounded, color: color, size: 20),
-          const SizedBox(width: AppTheme.sm),
-          Text(
-            isLulus ? 'Laporan ini telah diluluskan.' : 'Laporan ini telah ditolak.',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: color),
-          ),
+          const SizedBox(height: 8),
         ],
       ),
-    );
-  }
-
-  Widget _infoRow(IconData icon, String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 15, color: AppTheme.textMuted),
-        const SizedBox(width: AppTheme.sm - 2),
-        Text('$label: ', style: const TextStyle(fontSize: 12, color: AppTheme.textMuted)),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _errorBanner() {
-    return Container(
-      padding: const EdgeInsets.all(AppTheme.sm + 4),
-      decoration: BoxDecoration(
-        color: AppTheme.errorLight,
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-        border: Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.error_outline, color: AppTheme.error, size: 16),
-          const SizedBox(width: AppTheme.sm),
-          Expanded(child: Text(_error!, style: const TextStyle(fontSize: 12, color: AppTheme.error))),
-        ],
-      ),
-    );
-  }
-
-  Widget _card({required Widget child}) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(color: AppTheme.border),
-        boxShadow: AppTheme.cardShadow,
-      ),
-      padding: const EdgeInsets.all(AppTheme.md),
-      child: child,
     );
   }
 }

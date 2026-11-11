@@ -2,7 +2,10 @@ name: Build iPANTAU APK
 
 on:
   push:
+    branches: [main, v2-ui]
+  pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -23,7 +26,19 @@ jobs:
         run: flutter pub get
 
       - name: Analyze code
-        run: flutter analyze
+        run: |
+          set +e
+          flutter analyze --no-pub > analyze.txt 2>&1
+          code=$?
+          cat analyze.txt
+          # Surface each issue as a GitHub annotation (visible in the PR/checks UI)
+          grep -E '^ *(error|warning|info) [^ ]+ ' analyze.txt | head -50 \
+            | sed -E 's/^ *(error|warning|info) [^ ]+ (.*) [^ ]+ ([^ ]+):([0-9]+):([0-9]+) [^ ]+ ([a-z_0-9]+)$/::\1 file=\3,line=\4,col=\5::\6: \2/' \
+            | sed -E 's/^::info /::notice /'
+          exit $code
+
+      - name: Run tests
+        run: flutter test --no-pub
 
       - name: Build APK
         run: flutter build apk --release
@@ -31,6 +46,6 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: iPANTAU-v1.0.0
+          name: iPANTAU-apk-${{ github.run_number }}
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 90

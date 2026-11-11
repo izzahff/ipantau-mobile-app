@@ -19,7 +19,19 @@ class ApiService {
       };
 
   static Map<String, dynamic> _handleResponse(http.Response response) {
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    try {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } on FormatException {
+      // e.g. Express "Cannot POST /api/..." HTML page when a route is missing
+      if (response.statusCode == 404) {
+        return {
+          'success': false,
+          'notFound': true,
+          'message': 'Ciri ini belum tersedia di pelayan.',
+        };
+      }
+      rethrow;
+    }
   }
 
   static Future<Map<String, dynamic>> _get(
@@ -173,6 +185,25 @@ class ApiService {
         'kata_laluan_baru': kataLaluanBaru,
       },
     );
+  }
+
+  /// Step 1 of password reset: ask the server to email a 6-digit code.
+  /// The server should answer success even for unknown emails.
+  static Future<Map<String, dynamic>> lupaKataLaluan({required String email}) async {
+    return _post('/auth/lupa-kata-laluan', body: {'email': email.trim().toLowerCase()});
+  }
+
+  /// Step 2 of password reset: verify the code and set a new password.
+  static Future<Map<String, dynamic>> resetKataLaluan({
+    required String email,
+    required String kod,
+    required String kataLaluanBaru,
+  }) async {
+    return _post('/auth/reset-kata-laluan', body: {
+      'email': email.trim().toLowerCase(),
+      'kod': kod.trim(),
+      'kata_laluan_baru': kataLaluanBaru,
+    });
   }
 
   static Future<Map<String, dynamic>> getPekerjaKehadiranHariIni(String token) async {

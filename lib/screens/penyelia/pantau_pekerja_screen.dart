@@ -10,8 +10,8 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/common/shimmer_loading.dart';
+import '../../widgets/v2/dash_widgets.dart';
+import '../../widgets/v2/ui.dart';
 
 class PantauPekerjaScreen extends StatefulWidget {
   const PantauPekerjaScreen({super.key});
@@ -26,6 +26,7 @@ class _PantauPekerjaScreenState extends State<PantauPekerjaScreen> {
   String? _error;
 
   late final TextEditingController _searchCtrl;
+  String? _tapak; // null = semua tapak
 
   @override
   void initState() {
@@ -79,21 +80,12 @@ class _PantauPekerjaScreenState extends State<PantauPekerjaScreen> {
     return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
   }
 
-  String _initials(String nama) {
-    final parts = nama.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty || parts[0].isEmpty) return '?';
-    if (parts.length == 1) return parts[0][0].toUpperCase();
-    return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-  }
 
   List<Map<String, dynamic>> get _filteredRows {
     final q = _searchCtrl.text.toLowerCase().trim();
-    final all = q.isEmpty
-        ? List<Map<String, dynamic>>.from(_rows)
-        : _rows
-            .where((r) =>
-                (r['nama']?.toString() ?? '').toLowerCase().contains(q))
-            .toList();
+    final all = _siteRows
+        .where((r) => q.isEmpty || (r['nama']?.toString() ?? '').toLowerCase().contains(q))
+        .toList();
 
     final hadir = all.where((r) => r['hadir'] == true).toList()
       ..sort((a, b) {
@@ -112,112 +104,59 @@ class _PantauPekerjaScreenState extends State<PantauPekerjaScreen> {
     return [...hadir, ...belum];
   }
 
-  void _showExportSheet() {
-    showModalBottomSheet<void>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(
-            16, 16, 16, MediaQuery.of(ctx).padding.bottom + 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Eksport Kehadiran',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Muat turun rekod kehadiran hari ini',
-              style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
-            ),
-            const SizedBox(height: 16),
-            _exportOption(
-              iconBg: const Color(0xFFFEE2E2),
-              iconText: 'PDF',
-              iconTextColor: const Color(0xFFDC2626),
-              title: 'Laporan PDF',
-              subtitle: 'Untuk cetakan dan rekod rasmi',
-              onTap: () {
-                Navigator.pop(ctx);
-                _exportPdf();
-              },
-            ),
-            const SizedBox(height: 8),
-            _exportOption(
-              iconBg: const Color(0xFFDCFCE7),
-              iconText: 'CSV',
-              iconTextColor: const Color(0xFF166534),
-              title: 'Fail CSV',
-              subtitle: 'Untuk buka di Excel / Sheets',
-              onTap: () {
-                Navigator.pop(ctx);
-                _exportCsv();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
-  Widget _exportOption({
-    required Color iconBg,
-    required String iconText,
-    required Color iconTextColor,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xFFE8EFF8)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: iconBg,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Center(
-                child: Text(
-                  iconText,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: iconTextColor,
-                  ),
+  List<String> get _tapakNames =>
+      _rows.map((r) => r['tapak_nama']?.toString()).whereType<String>().where((s) => s.isNotEmpty).toSet().toList()..sort();
+
+  List<Map<String, dynamic>> get _siteRows =>
+      _tapak == null ? _rows : _rows.where((r) => r['tapak_nama']?.toString() == _tapak).toList();
+
+  void _showExportSheet() {
+    showIpSheet<void>(
+      context,
+      title: 'Eksport Kehadiran',
+      builder: (ctx) {
+        final c = ctx.ip;
+        Widget opt(String badge, IpTone tone, String title, String sub, VoidCallback onTap) {
+          final (bg, fg) = toneColors(ctx, tone);
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: IpCard(
+              pad: 14,
+              onTap: () {
+                Navigator.pop(ctx);
+                onTap();
+              },
+              child: Row(children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+                  alignment: Alignment.center,
+                  child: Text(badge, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: fg)),
                 ),
-              ),
+                const SizedBox(width: 13),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: c.text)),
+                    Text(sub, style: TextStyle(fontSize: 12.5, color: c.text3)),
+                  ]),
+                ),
+                IpIcon('chevronRight', size: 18, color: c.text3),
+              ]),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: const TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w500)),
-                  Text(subtitle,
-                      style: const TextStyle(
-                          fontSize: 11, color: AppTheme.textMuted)),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right, color: AppTheme.textMuted, size: 18),
-          ],
-        ),
-      ),
+          );
+        }
+
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: Text('Muat turun rekod kehadiran hari ini', style: TextStyle(fontSize: 13, color: c.text2)),
+          ),
+          opt('PDF', IpTone.crimson, 'Laporan PDF', 'Untuk cetakan dan rekod rasmi', _exportPdf),
+          opt('CSV', IpTone.emerald, 'Fail CSV', 'Untuk buka di Excel / Sheets', _exportCsv),
+        ]);
+      },
     );
   }
 
@@ -243,13 +182,7 @@ class _PantauPekerjaScreenState extends State<PantauPekerjaScreen> {
   ];
 
   Future<void> _exportPdf() async {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      const SnackBar(
-        content: Text('Menghasilkan laporan PDF...'),
-        duration: Duration(seconds: 3),
-      ),
-    );
+    showIpToast(context, 'Menghasilkan laporan PDF…', tone: IpToastTone.info);
 
     try {
       final sorted = _sortedForExport();
@@ -347,22 +280,13 @@ class _PantauPekerjaScreenState extends State<PantauPekerjaScreen> {
       );
     } catch (_) {
       if (mounted) {
-        messenger.showSnackBar(
-          const SnackBar(
-              content: Text('Gagal hasilkan PDF. Cuba lagi.')),
-        );
+        showIpToast(context, 'Gagal hasilkan PDF. Cuba lagi.', tone: IpToastTone.danger);
       }
     }
   }
 
   Future<void> _exportCsv() async {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      const SnackBar(
-        content: Text('Menghasilkan fail CSV...'),
-        duration: Duration(seconds: 3),
-      ),
-    );
+    showIpToast(context, 'Menghasilkan fail CSV…', tone: IpToastTone.info);
 
     try {
       final sorted = _sortedForExport();
@@ -398,383 +322,154 @@ class _PantauPekerjaScreenState extends State<PantauPekerjaScreen> {
       );
     } catch (_) {
       if (mounted) {
-        messenger.showSnackBar(
-          const SnackBar(
-              content: Text('Gagal hasilkan CSV. Cuba lagi.')),
-        );
+        showIpToast(context, 'Gagal hasilkan CSV. Cuba lagi.', tone: IpToastTone.danger);
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.background,
-      appBar: AppBar(
-        toolbarHeight: 60,
-        backgroundColor: AppTheme.navy,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        title: const Text(
-          'Pantau Pekerja',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.upload_file_outlined),
-            tooltip: 'Eksport',
-            onPressed: _rows.isEmpty ? null : _showExportSheet,
-          ),
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            tooltip: 'Notifikasi',
-            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Tiada notifikasi baharu.')),
-            ),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        top: false,
-        child: RefreshIndicator(
-          color: AppTheme.navy,
-          onRefresh: _load,
-          child: _buildBody(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBody() {
-    if (_loading && _rows.isEmpty) return const ShimmerList();
-
-    if (_error != null && _rows.isEmpty) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        children: [const SizedBox(height: 48), _errorBanner()],
-      );
-    }
-
-    if (_rows.isEmpty) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        children: [const SizedBox(height: 80), _emptyState()],
-      );
-    }
-
+    final c = context.ip;
+    final sites = _tapakNames;
     final filtered = _filteredRows;
+    final all = _siteRows;
+    final present = all.where((r) => r['hadir'] == true).length;
+    final pct = all.isEmpty ? 0 : (present * 100 ~/ all.length);
 
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-      children: [
-        _buildSummaryCard(),
-        const SizedBox(height: 12),
-        _buildSearchBar(),
-        const SizedBox(height: 12),
-        if (filtered.isEmpty)
-          const Padding(
-            padding: EdgeInsets.only(top: 32),
-            child: Center(
-              child: Text(
-                'Tiada pekerja dijumpai.',
-                style: TextStyle(color: AppTheme.textMuted, fontSize: 13),
-              ),
-            ),
-          )
-        else
-          ...filtered.map(_workerCard),
-      ],
-    );
-  }
-
-  Widget _buildSummaryCard() {
-    final total = _rows.length;
-    final hadir = _rows.where((r) => r['hadir'] == true).length;
-    final pct = total > 0 ? (hadir * 100 ~/ total) : 0;
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppTheme.background,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE8EFF8)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Kehadiran Hari Ini',
-            style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '$hadir daripada $total pekerja',
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppTheme.navy,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '$pct%',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSearchBar() {
-    return TextField(
-      controller: _searchCtrl,
-      onChanged: (_) => setState(() {}),
-      style: const TextStyle(fontSize: 13),
-      decoration: InputDecoration(
-        hintText: 'Cari nama pekerja...',
-        hintStyle: const TextStyle(fontSize: 13, color: AppTheme.textMuted),
-        prefixIcon: const Icon(Icons.search, size: 18, color: AppTheme.textMuted),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFFE8EFF8)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFFE8EFF8)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: AppTheme.navy),
-        ),
-      ),
-    );
-  }
-
-  Widget _workerCard(Map<String, dynamic> r) {
-    final hadir = r['hadir'] == true;
-    final nama = r['nama']?.toString() ?? '-';
-    final tapakNama = r['tapak_nama']?.toString() ?? '';
-    final masuk = _formatMasa(r['masa_checkin']);
-    final keluar = _formatMasa(r['masa_checkout']);
-
-    return Opacity(
-      opacity: hadir ? 1.0 : 0.5,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xFFE8EFF8), width: 0.5),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return IpPushedScaffold(
+      title: 'Pantau Pekerja',
+      right: Row(mainAxisSize: MainAxisSize.min, children: [
+        IpIconButton(icon: 'file', label: 'Eksport', onTap: _rows.isEmpty ? () {} : _showExportSheet),
+        const IpHeaderBell(),
+      ]),
+      body: RefreshIndicator(
+        color: c.azure500,
+        onRefresh: _load,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
           children: [
-            // Square avatar with rounded corners
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: const Color(0xFFE2E8F0),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Center(
-                child: Text(
-                  _initials(nama),
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF475569),
-                  ),
+            if (_error != null) ...[IpErrorBox(_error!, onRetry: _load), const SizedBox(height: 14)],
+            if (_loading && _rows.isEmpty)
+              const IpLoading()
+            else if (_rows.isEmpty)
+              const DashEmpty(icon: 'users', title: 'Tiada pekerja', sub: 'Tiada pekerja berdaftar di bawah syarikat anda.')
+            else ...[
+              if (sites.length > 1) ...[
+                SizedBox(
+                  height: 38,
+                  child: ListView(scrollDirection: Axis.horizontal, children: [
+                    _sitePill(context, 'Semua tapak', _tapak == null, () => setState(() => _tapak = null)),
+                    for (final s in sites) _sitePill(context, s, _tapak == s, () => setState(() => _tapak = s)),
+                  ]),
                 ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            // Info column
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Name + status row
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          nama,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                const SizedBox(height: 14),
+              ],
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(gradient: c.headerGradient, borderRadius: BorderRadius.circular(IpRadius.lg)),
+                child: Row(children: [
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Kehadiran Hari Ini', style: TextStyle(fontSize: 12.5, color: c.onNavy2, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 3),
+                      Text.rich(TextSpan(children: [
+                        TextSpan(
+                          text: '$present ',
+                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -.48),
+                        ),
+                        TextSpan(
+                          text: 'daripada ${all.length} pekerja',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.onNavy2),
+                        ),
+                      ])),
+                    ]),
+                  ),
+                  SizedBox(
+                    width: 58,
+                    height: 58,
+                    child: Stack(alignment: Alignment.center, children: [
+                      SizedBox.expand(
+                        child: CircularProgressIndicator(
+                          value: pct / 100,
+                          strokeWidth: 7,
+                          color: c.azure400,
+                          backgroundColor: Colors.white.withValues(alpha: .14),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      if (hadir) ...[
-                        Container(
-                          width: 7,
-                          height: 7,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF22C55E),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Text(
-                          'Hadir',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: Color(0xFF166534),
-                          ),
-                        ),
-                      ] else
-                        const Text(
-                          'Belum hadir',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: AppTheme.textMuted,
-                          ),
-                        ),
-                    ],
+                      Text('$pct%', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.white)),
+                    ]),
                   ),
-                  const SizedBox(height: 3),
-                  // Tapak or placeholder
-                  Text(
-                    hadir
-                        ? (tapakNama.isNotEmpty ? tapakNama : '—')
-                        : 'Belum check-in hari ini',
-                    style: const TextStyle(
-                        fontSize: 12, color: AppTheme.textMuted),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  // Time row — hadir only
-                  if (hadir) ...[
-                    const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        const Text(
-                          'Masuk: ',
-                          style: TextStyle(
-                              fontSize: 12, color: AppTheme.textMuted),
-                        ),
-                        Text(
-                          masuk.isNotEmpty ? masuk : '—',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontFamily: 'monospace',
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'Keluar: ',
-                          style: TextStyle(
-                              fontSize: 12, color: AppTheme.textMuted),
-                        ),
-                        Text(
-                          keluar.isNotEmpty ? keluar : '—',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontFamily: 'monospace',
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
+                ]),
               ),
-            ),
+              const SizedBox(height: 16),
+              IpSearchBar(controller: _searchCtrl, hint: 'Cari nama pekerja…', onChanged: (_) => setState(() {})),
+              const SizedBox(height: 16),
+              if (filtered.isEmpty)
+                DashEmpty(icon: 'search', title: 'Tiada pekerja dijumpai', sub: 'Tiada padanan untuk "${_searchCtrl.text}".')
+              else
+                for (final r in filtered) Padding(padding: const EdgeInsets.only(bottom: 10), child: _workerRow(context, r)),
+            ],
+            const SizedBox(height: 8),
           ],
         ),
       ),
     );
   }
 
-  Widget _emptyState() {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(24),
+  Widget _sitePill(BuildContext context, String label, bool on, VoidCallback onTap) {
+    final c = context.ip;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: AppTheme.navy.withValues(alpha: 0.06),
-            shape: BoxShape.circle,
+            color: on ? c.azure50 : c.surface,
+            borderRadius: BorderRadius.circular(99),
+            border: Border.all(color: on ? c.azure500 : c.line2, width: 1.5),
           ),
-          child: const Icon(
-            Icons.people_outline,
-            size: 40,
-            color: AppTheme.navy,
-          ),
+          child: Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: on ? c.azure700 : c.text2)),
         ),
-        const SizedBox(height: 16),
-        const Text(
-          'Tiada pekerja',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: AppTheme.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          'Tiada pekerja (kontraktor) dalam\nsyarikat anda buat masa ini.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 12,
-            color: AppTheme.textMuted,
-            height: 1.5,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
-  Widget _errorBanner() {
+  Widget _workerRow(BuildContext context, Map<String, dynamic> r) {
+    final c = context.ip;
+    final hadir = r['hadir'] == true;
+    final nama = r['nama']?.toString() ?? '-';
+    final masuk = _formatMasa(r['masa_checkin']);
+    final keluar = _formatMasa(r['masa_checkout']);
+    final tapak = r['tapak_nama']?.toString() ?? '';
+    final sub = hadir
+        ? 'Check-in pada $masuk${keluar.isNotEmpty ? ' · keluar $keluar' : ''}${tapak.isNotEmpty && _tapak == null ? ' · $tapak' : ''}'
+        : 'Belum check-in hari ini';
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
       decoration: BoxDecoration(
-        color: AppTheme.errorLight,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-            color: AppTheme.error.withValues(alpha: 0.3)),
+        color: c.surface,
+        border: Border.all(color: c.line),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: c.shadowSm,
       ),
-      child: Row(
-        children: [
-          const Icon(Icons.error_outline, color: AppTheme.error, size: 16),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              _error!,
-              style: const TextStyle(fontSize: 12, color: AppTheme.error),
-            ),
-          ),
-        ],
-      ),
+      child: Row(children: [
+        IpAvatar(name: nama, size: 46, active: hadir),
+        const SizedBox(width: 13),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(nama,
+                maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: c.text)),
+            const SizedBox(height: 2),
+            Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: c.text3)),
+          ]),
+        ),
+        const SizedBox(width: 8),
+        Text(hadir ? 'Hadir' : 'Belum hadir',
+            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: hadir ? c.emerald600 : c.text3)),
+      ]),
     );
   }
 }
